@@ -1,0 +1,109 @@
+name: 'K8S Deployment'
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        required: true
+        default: 'dev'
+        description: 'Fill the environment Name (dev,qa,qb)'
+
+jobs:
+  Deployment:
+    name: 'Deployment'
+    runs-on: self-hosted
+    steps:
+
+      - name: 'Checkout'
+        uses: actions/checkout@master
+
+      - name: 'Init Submodule'
+        run: |
+          git init
+          mv index .git/index
+          git submodule init &&  git submodule update
+
+      - name: 'Configure AWS credentials'
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DUMMY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DUMMY }}
+          aws-region: eu-west-1
+
+      - name: 'Login to Amazon ECR'
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: 'Docker Lint'
+        run: |
+          docker run -v $(pwd):/project:ro --workdir=/project --rm -i hadolint/hadolint:latest-debian hadolint /project/Dockerfile
+
+      - name: 'Checkovs checks for IaaC'
+          run: |
+            checkov -d ./_infra
+
+      - name: 'Build, tag, and push image to Amazon ECR For DEV'
+        if: ${{ github.event.inputs.environment == 'dev' }}
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: api-platform
+          IMAGE_TAG: ${{ github.run_id }}
+        run: |
+          docker build --build-arg BASE_IMAGE_TAG=7.3.17-nginx \
+          --build-arg ENV=dev --build-arg APP_ENV=$APP_ENV \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:dev
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev
+
+      - name: 'Build, tag, and push image to Amazon ECR For QA'
+        if: ${{ github.event.inputs.environment == 'qa' }}
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: api-platform
+          IMAGE_TAG: ${{ github.run_id }}
+        run: |
+          docker build --build-arg BASE_IMAGE_TAG=7.3.17-nginx \
+          --build-arg ENV=dev --build-arg APP_ENV=$APP_ENV \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:qa
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:qa
+
+      - name: 'Build, tag, and push image to Amazon ECR For QB'
+        if: ${{ github.event.inputs.environment == 'qa' }}
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: api-platform
+          IMAGE_TAG: ${{ github.run_id }}
+        run: |
+          docker build --build-arg BASE_IMAGE_TAG=7.3.17-nginx \
+          --build-arg ENV=dev --build-arg APP_ENV=$APP_ENV \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:qb
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:qb
+
+      - name: Deploy For DEV
+        if: ${{ github.event.inputs.environment == 'dev' }}
+        env:
+          IMAGE_TAG: ${{ github.run_id }}
+        run: |
+          export KUBECONFIG=/opt/k8s/config_k8s_dev.yml
+          helm upgrade --install --atomic --set image.tag=$IMAGE_TAG --namespace=dev -f ./_infra/k8s/platform/values/dev.yaml api-partner ./_infra/k8s/platform --wait --history-max 4 --timeout 120s
+
+      - name: Deploy For QA
+        if: ${{ github.event.inputs.environment == 'qa' }}
+        env:
+          IMAGE_TAG: ${{ github.run_id }}
+        run: |
+          export KUBECONFIG=/opt/k8s/config_k8s_dev.yml
+          helm upgrade --install --atomic --set image.tag=$IMAGE_TAG --namespace=qa -f ./_infra/k8s/platform/values/qa.yaml api-partner ./_infra/k8s/platform --wait --history-max 4 --timeout 120s
+
+      - name: Deploy For QB
+        if: ${{ github.event.inputs.environment == 'qb' }}
+        env:
+          IMAGE_TAG: ${{ github.run_id }}
+        run: |
+          export KUBECONFIG=/opt/k8s/config_k8s_dev.yml
+          helm upgrade --install --atomic --set image.tag=$IMAGE_TAG --namespace=qb -f ./_infra/k8s/platform/values/qb.yaml api-partner ./_infra/k8s/platform --wait --history-max 4 --timeout 120s
+
