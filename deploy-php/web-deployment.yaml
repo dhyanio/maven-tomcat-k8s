@@ -17,6 +17,6 @@ spec:
       containers:
       - name: php-apache
         image: learningk8s_website
-        imagePullPolicy: Never
+        imagePullPolicy: Always
         ports:
         - containerPort: 80
