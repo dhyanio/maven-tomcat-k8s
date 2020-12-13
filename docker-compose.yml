@@ -1,0 +1,54 @@
+version: '3'
+services:
+  spring3hibernate.okts.tk:
+    build:
+      context: . 
+      dockerfile: Dockerfile
+    expose:
+      - '8080'
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 10s
+    depends_on: 
+      - mysql.okts.tk
+
+  mysql.okts.tk:
+    image: mysql:5.6
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 10s
+    expose:
+      - '3306'
+    environment:
+       MYSQL_DATABASE: employeedb
+       MYSQL_USER: 'root'
+       MYSQL_PASSWORD: 'password'
+       MYSQL_ROOT_PASSWORD: 'password'
+    volumes:
+       - mysql_okts_tk:/var/lib/mysql
+
+  ingress.okts.tk:
+    build:
+      context: nginx
+      dockerfile: Dockerfile
+    ports:
+      - "80:80" 
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 10s
+    depends_on: 
+      - spring3hibernate.okts.tk
+    
+volumes:
+  mysql_okts_tk:
+
+    

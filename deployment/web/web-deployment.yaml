@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dhyanio-app-service
+spec:
+  type: ClusterIP
+  ports:
+   - name: "http-port"
+     protocol: "TCP"
+     port: 8080
+     targetPort: 8080
+  selector:
+    app: dhyanio-app
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dhyanio-app
+spec:
+  selector:
+    matchLabels:
+      app: dhyanio-app
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: dhyanio-app
+    spec:
+      containers:
+      - image: dhyanio/tomcat-maven-nginx:v1
+        name: dhyanio-app
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: password
+        ports:
+        - containerPort: 8080
+          name: dhyanio-app
