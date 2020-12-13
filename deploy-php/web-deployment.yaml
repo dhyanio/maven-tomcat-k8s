@@ -3,20 +3,19 @@ kind: Deployment
 metadata:
   name: webserver
   labels:
-    app: apache
+    app: dhyanio-app
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: apache
+      app: dhyanio-app
   template:
     metadata:
       labels:
-        app: apache
+        app: dhyanio-app
     spec:
       containers:
       - name: php-apache
-        image: learningk8s_website
-        imagePullPolicy: Always
+        image: dhyanio/tomcat-maven-nginx:v1
         ports:
         - containerPort: 80
